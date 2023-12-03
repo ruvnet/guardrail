@@ -8,7 +8,7 @@ Equipped with sophisticated features like sentiment analysis, content classifica
 Guardrail's adaptability extends to various applications, from academic research to mental health, ensuring high-quality, contextually apt AI contributions. Bridging the gap between AI's raw power and real-world applications, this API-centric framework is an invaluable addition to existing AI and analysis ecosystems across multiple industries.
 
 ## AI Guardrails
-AI Guardrails, as implemented in the OpenAI Data Analysis & Guiderails Script, are a set of advanced mechanisms and protocols designed to regulate and oversee the performance of AI systems, particularly in generating and analyzing text. The primary purpose of these guardrails is to ensure that the AI operates within a predefined ethical and quality framework, producing results that are not only accurate but also align with societal norms and values.
+AI Guardrails, as implemented in the GuardRail Script & API, are a set of advanced mechanisms and protocols designed to regulate and oversee the performance of AI systems, particularly in generating and analyzing text. The primary purpose of these guardrails is to ensure that the AI operates within a predefined ethical and quality framework, producing results that are not only accurate but also align with societal norms and values.
 
 ## 🌟 Key Features and Capabilities
 
