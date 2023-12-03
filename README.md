@@ -26,9 +26,9 @@ AI Guardrails, as implemented in the OpenAI Data Analysis & Guiderails Script, a
 | 🧠 **Psychological Analysis**           | Analyzes text to understand psychological aspects, including emotions, behaviors, and mental states. |
 | 🔄 **Feedback and Improvement Mechanisms** | Incorporates user feedback for continuous improvement of the system, adapting to evolving requirements and standards. |
 
-# OpenAI Data Analysis & Guiderails Script Capabilities Overview
+# Capabilities Overview
 
-The OpenAI Data Analysis & Guiderails Script offers a wide range of capabilities, organized into various groups based on tasks or focus areas. These capabilities are designed to analyze text data comprehensively, offering insights across multiple dimensions. The `/analysis_types` endpoint provides a complete list of these functions, with an extensive array of over 50 different analysis types.
+The Guiderails Script offers a wide range of capabilities, organized into various groups based on tasks or focus areas. These capabilities are designed to analyze text data comprehensively, offering insights across multiple dimensions. The `/analysis_types` endpoint provides a complete list of these functions, with an extensive array of over 50 different analysis types.
 
 ## 📊 Text Analysis
 - **Sentiment Analysis**: Determine the sentiment (positive, negative, or neutral) and provide a confidence score.
@@ -102,7 +102,7 @@ Please note that the script includes over 50 distinct analysis functions. For th
 
 ## Detailed Overview of the Conditional System
 
-The conditional system in the OpenAI Data Analysis & Guiderails Script is designed to execute complex analyses with conditions applied to the results. This system allows for greater control and specificity in handling AI-generated data.
+The conditional system in the Guiderail's Script is designed to execute complex analyses with conditions applied to the results. This system allows for greater control and specificity in handling AI-generated data.
 
 ### Simple and Advanced Conditions
 
