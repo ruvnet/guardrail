@@ -1,6 +1,7 @@
 # GuardRail - Open Source Ai Guidance & Analysis API 
+![Guardrail](https://github.com/ruvnet/guardrail/blob/main/assets/guardrail.png?raw=true)
 
-The OpenAI Data Analysis & Guiderails Script is an API-driven framework, meticulously crafted to complement and enhance existing AI systems and analysis workflows, including chatbots and intelligent agents. As a versatile tool, it seamlessly integrates with OpenAI's GPT models, offering a robust platform for advanced data analysis and dynamic conditional completions. This script is pivotal in refining AI-powered text outputs, significantly elevating their quality and contextual relevance, making it a vital asset in diverse professional settings.
+The GuardRail Data Analysis system is an API-driven framework, meticulously crafted to complement and enhance existing AI systems and analysis workflows, including chatbots and intelligent agents. As a versatile tool, it seamlessly integrates with OpenAI's GPT models, offering a robust platform for advanced data analysis and dynamic conditional completions. This script is pivotal in refining AI-powered text outputs, significantly elevating their quality and contextual relevance, making it a vital asset in diverse professional settings.
 
 Equipped with sophisticated features like sentiment analysis, content classification, and trend detection, it provides deep insights into textual data, crucial for areas like content moderation, where it ensures digital spaces are respectful and safe, and customer support, improving responsiveness and effectiveness. Its prowess in market research lies in dissecting and interpreting voluminous text data to identify trends and gauge public opinion, thereby informing strategic decision-making.
 
@@ -247,7 +248,7 @@ Response Format
 ## Code Structure
 - `main.py`: Contains the FastAPI app initialization, endpoint definitions, and business logic.
 - `prompts.py`: Includes predefined prompts and JSON schemas for different types of analysis.
-- `security.py`: Manages authentication and security features.
+- `security.py`: Manages authentication and security features. (Coming Soon)
 
 ## Contributing
 To contribute, please fork the repository, make changes, and submit a pull request. Contributions are welcome to improve the script's functionality and efficiency.
