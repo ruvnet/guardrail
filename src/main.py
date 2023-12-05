@@ -66,7 +66,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "https://guardrails.ruvnet.repl.co"
+    dev_url = "yourURL.com"
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
