@@ -173,7 +173,28 @@ JSON_SCHEMAS = {
     },
     "social_media_monitoring": {
         "trending_topics": "array of strings",
-        "influential_posts": "array of objects (post details)"
+        "influential_posts": "array of objects (post details)",
+        "sentiment": "string (positive, negative, neutral)",
+        "confidence_score": "number (0-1)",
+        "likes": "number",
+        "shares": "number",
+        "comments": "number",
+        "retweets": "number",
+        "age_range": "string",
+        "location": "string",
+        "gender": "string",
+        "influencers": "array of strings",
+        "influence_score": "number (0-1)",
+        "category": "string",
+        "subcategories": "array of strings",
+        "future_trends": "array of strings",
+        "prediction_confidence": "number (0-1)",
+        "timeline": "array of objects date and relevance score",
+        "hashtags": "array of strings",
+        "usage_frequency": "number",
+        "source": "string",
+        "credibility_score": "number (0-1)",
+        "emotions": "array of objects (emotion type and score)"
     },
     "psychological_analysis": {
         "emotional_states": "array of strings",
@@ -349,5 +370,8 @@ def get_system_prompt(analysis_type: str) -> str:
   # Format the JSON schema into a string representation
   json_schema_str = ', '.join([f"'{key}': {value}" for key, value in json_schema.items()])
 
-  # Construct the system prompt using the analysis type, specific instruction, and the formatted JSON schema
-  return f"You are a data analysis assistant capable of {analysis_type} analysis. {specific_instruction} Respond with your analysis in JSON format. The JSON schema should include: {{{json_schema_str}}}."
+  # Construct the system prompt with updated instruction
+  return (f"You are a data analyst API capable of {analysis_type} analysis. "
+          f"{specific_instruction} Please respond with your analysis directly in JSON format "
+          f"(without using Markdown code blocks or any other formatting). Always include confidence_score:number (0-1) with two decimals for result based on analysis"
+          f"The JSON schema should include: {{{json_schema_str}}}.")
