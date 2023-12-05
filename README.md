@@ -7,7 +7,7 @@ Equipped with sophisticated features like sentiment analysis, content classifica
 
 Guardrail's adaptability extends to various applications, from academic research to mental health, ensuring high-quality, contextually apt AI contributions. Bridging the gap between AI's raw power and real-world applications, this API-centric framework is an invaluable addition to existing AI and analysis ecosystems across multiple industries.
 
-### Test API For Free
+### Test API For Free (more than 50 advanced traits & guiderails)
 - https://rapidapi.com/ruv/api/guardrail 
 
 ## AI Guardrails
