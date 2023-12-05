@@ -5,6 +5,7 @@
 
 # Standard library imports
 import os
+import re
 import json
 import logging
 from typing import List, Literal, Optional, Union, Dict, Any
@@ -65,7 +66,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "yourURL.com"
+    dev_url = "https://guardrails.ruvnet.repl.co"
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
@@ -148,8 +149,10 @@ async def proxy_openai_api_completions(completion_request: CompletionRequest, to
 class Condition(BaseModel):
     analysis_type: str
     key: str
-    threshold: Union[float, str]  # Updated to accept both float and str
-    condition_type: Literal['greater', 'less', 'equal', 'contains'] 
+    threshold: Optional[Union[float, str]] = None  # Making threshold optional
+    condition_type: Literal['greater', 'less', 'equal', 'contains', 'exists', 
+                           'is_type', 'length_greater', 'length_less', 'length_equal', 
+                           'nested_contains', 'regex_match', 'key_value_pair']
 
 # Advanced Analysis
 # Model for an analysis request
@@ -327,14 +330,6 @@ async def get_analysis_types(query: Optional[str] = Query(None, description="Key
 
     return AnalysisTypesResponse(analysis_types=filtered_analysis_types)
 
-# Conditional Endpoints
-class Condition(BaseModel):
-    analysis_type: str  # e.g., 'sentiment'
-    key: str  # Key in the analysis result to check
-    threshold: float
-    condition_type: Literal['greater', 'less']  # Type of condition
-
-
 # Helper function to suggest correct key-value pair using the existing call_openai_api function
 async def suggest_correct_key(data: dict):
     prompt = f"Based on the following JSON structure, what should be the correct key and value format? JSON: {json.dumps(data)}"
@@ -441,47 +436,93 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
     request_data.analysis_type = analysis_type
     return await perform_analysis(request_data)
 
+# Helper function to extract value from nested JSON data
+def extract_value(data, key):
+    keys = key.split('.')
+    for k in keys:
+        if '[' in k and ']' in k:  # Handle array indices
+            array_key, index = k[:-1].split('[')
+            if index == '*':  # Handle wildcard
+                # Extract all items for a wildcard
+                return [sub_item for sub_item in data.get(array_key, [])]
+            else:
+                # Extract a specific item by index
+                data = data.get(array_key, [])[int(index)]
+        else:
+            # Proceed to the next key if not an array
+            data = data.get(k, {})
+    return data
+
 # Function to check if a condition is met
 def check_condition(analysis_result, condition):
     """
     Check if a given condition is met based on the analysis result.
 
     Args:
-    analysis_result (AnalysisResult): The result of the analysis.
-    condition (Condition): The condition to check against the analysis result.
+        analysis_result (AnalysisResult): The result of the analysis.
+        condition (Condition): The condition to check against the analysis result.
 
     Returns:
-    bool: True if the condition is met, False otherwise.
+        bool: True if the condition is met, False otherwise.
     """
-    result_value = analysis_result.details.get(condition.key)
+    result_value = extract_value(analysis_result.details, condition.key)
 
     if result_value is None:
-       return False
+        return False
 
-    if condition.condition_type == 'greater':
-        try:
-           return float(result_value) > condition.threshold
-        except (TypeError, ValueError):
-           return False
+    try:
+        if condition.condition_type == 'greater':
+            if isinstance(result_value, list):
+                return all(float(item) > float(condition.threshold) for item in result_value)
+            return float(result_value) > float(condition.threshold)
 
-    elif condition.condition_type == 'less':
-        try:
-           return float(result_value) < condition.threshold
-        except (TypeError, ValueError):
-            return False
+        elif condition.condition_type == 'less':
+            if isinstance(result_value, list):
+                return all(float(item) < float(condition.threshold) for item in result_value)
+            return float(result_value) < float(condition.threshold)
 
-    elif condition.condition_type == 'equal':
-        if isinstance(result_value, list):
-            return condition.threshold in result_value
-        return str(result_value) == str(condition.threshold)
+        elif condition.condition_type == 'equal':
+            if isinstance(result_value, dict):
+                return any(str(v) == str(condition.threshold) for v in result_value.values())
+            if isinstance(result_value, list):
+                return any(str(item) == str(condition.threshold) for item in result_value)
+            return str(result_value) == str(condition.threshold)
 
-    elif condition.condition_type == 'contains':
-        if isinstance(result_value, list):
-           return str(condition.threshold) in map(str, result_value)
-        return str(condition.threshold) in str(result_value)
+        elif condition.condition_type == 'contains':
+            if isinstance(result_value, list):
+                return any(str(condition.threshold) in str(item) for item in result_value)
+            return str(condition.threshold) in str(result_value)
+
+        elif condition.condition_type == 'exists':
+            return result_value is not None
+
+        elif condition.condition_type == 'is_type':
+            expected_type = getattr(__builtins__, condition.threshold, None)
+            return isinstance(result_value, expected_type)
+
+        elif condition.condition_type in ['length_greater', 'length_less', 'length_equal']:
+            if hasattr(result_value, '__len__'):
+                length = len(result_value)
+                threshold = int(condition.threshold)
+                if condition.condition_type == 'length_greater':
+                    return length > threshold
+                elif condition.condition_type == 'length_less':
+                    return length < threshold
+                elif condition.condition_type == 'length_equal':
+                    return length == threshold
+
+        elif condition.condition_type == 'regex_match':
+            return bool(re.match(condition.threshold, str(result_value), re.DOTALL | re.MULTILINE))
+
+        elif condition.condition_type == 'key_value_pair':
+            if isinstance(result_value, dict):
+                key, val = condition.threshold.split(':', 1)
+                return str(result_value.get(key, "")) == val
+
+    except (TypeError, ValueError, IndexError):
+        return False
 
     return False
-
 
 # Main function to run the app
 if __name__ == "__main__":
