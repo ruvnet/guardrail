@@ -65,7 +65,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "yourURL.com"
+    dev_url = "https://guardrails.ruvnet.repl.co"
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
@@ -239,9 +239,6 @@ analysis_examples = {
   }
   for analysis_type in analysis_types
 }
-
-# Analysis Endpoint
-# ... [other parts of your code] ...
 
 # Endpoint for performing analysis
 @app.post("/analysis/", response_model=AnalysisResult)
