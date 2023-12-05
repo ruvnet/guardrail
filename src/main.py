@@ -23,6 +23,8 @@ from pydantic import BaseModel, Field
 
 # External library imports
 import requests
+import asyncio
+import httpx
 
 # Local module imports
 import prompts  # Import the prompts module
@@ -62,7 +64,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "https://guardrails.ruvnet.repl.co"
+    dev_url = "yourURL.com" # replace with your dev server, set production server using OS env value SERVER_URL
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
@@ -113,27 +115,32 @@ class CompletionRequest(BaseModel):
     stream: bool = False
 
 # Function to call OpenAI API
-def call_openai_api(endpoint: str, data: dict):
-    openai_api_key = os.getenv("OPENAI_API_KEY")  # Retrieve API key from environment variable
-    headers = {
-        "Authorization": f"Bearer {openai_api_key}",
-        "Content-Type": "application/json"
-    }
-    url = f"{OPENAI_API_BASE_URL}/{endpoint}"
-    response = requests.post(url, headers=headers, json=data)
+async def call_openai_api(endpoint: str, data: dict):
+  openai_api_key = os.getenv("OPENAI_API_KEY")  # Retrieve API key from environment variable
+  headers = {
+      "Authorization": f"Bearer {openai_api_key}",
+      "Content-Type": "application/json"
+  }
+  url = f"{OPENAI_API_BASE_URL}/{endpoint}"
+  response = None  # Initialize response to None
 
-    try:
-        response.raise_for_status()
-        return response.json()
-    except requests.HTTPError as http_err:
-        return {"error": str(http_err), "status_code": response.status_code}
-    except requests.exceptions.JSONDecodeError:
-        return {"response_text": response.text, "status_code": response.status_code}
+  async with httpx.AsyncClient() as client:
+      try:
+          response = await client.post(url, headers=headers, json=data)
+          response.raise_for_status()
+          return response.json()
+      except httpx.HTTPError as http_err:
+          # Provide a default status_code if response is None
+          status_code = response.status_code if response else 500
+          return {"error": str(http_err), "status_code": status_code}
+      except httpx.RequestError as req_err:
+          # Handle the case where response is never assigned
+          return {"error": str(req_err), "status_code": 500}
 
 # Endpoint for creating completions
 @app.post("/proxy_openai_api/completions/", tags=["Chat"])
 async def proxy_openai_api_completions(completion_request: CompletionRequest, token: str = Depends(get_current_user)):
-    return call_openai_api("chat/completions", completion_request.dict())
+    return await call_openai_api("chat/completions", completion_request.dict())
 
 # Condition class for specifying individual conditions in the analysis
 class Condition(BaseModel):
@@ -234,19 +241,14 @@ analysis_examples = {
 # Analysis Endpoint
 @app.post("/analysis/", response_model=AnalysisResult)
 async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(get_current_user)):
-    if request_data.analysis_type == 'message_length':
-        return AnalysisResult(
-            analysis="message_length",
-            details={"length": len(request_data.messages[0].content)},
-            error=None
-        )
-
+    # Constructing the system message
     system_message = {
        "role": "system",
        "content": prompts.get_system_prompt(request_data.analysis_type)
     }
     messages = [system_message] + [message.dict() for message in request_data.messages]
 
+    # Assembling the payload for the OpenAI API call
     payload = {
         "model": "gpt-4-1106-preview",
         "response_format": {"type": "json_object"},  # Enable JSON mode
@@ -256,9 +258,10 @@ async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(g
         "top_p": request_data.top_p
     }
 
-    openai_response = call_openai_api("chat/completions", payload)
+    # Asynchronously call the OpenAI API
+    openai_response = await call_openai_api("chat/completions", payload)
 
-    # Include the raw OpenAI response in the analysis result
+    # Process the OpenAI response and return the analysis result
     if 'choices' in openai_response and openai_response['choices']:
         last_message_content = openai_response['choices'][0].get('message', {}).get('content', '')
         try:
@@ -269,6 +272,8 @@ async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(g
             return AnalysisResult(analysis="Error in processing", details={}, error="Failed to parse the analysis result as JSON.", raw_openai_response=openai_response)
     else:
         return AnalysisResult(analysis="Error in response format", details={}, error="Invalid response format from OpenAI API.", raw_openai_response=openai_response)
+
+
 class AnalysisTypeExample(BaseModel):
     description: str
     example_request: Dict[str, Any]
@@ -295,14 +300,16 @@ async def get_analysis_types(query: Optional[str] = Query(None, description="Key
             ]
         }
 
-    filtered_analysis_types = {}
-    for analysis_type in prompts.ANALYSIS_TYPES:
-        if not query or query.lower() in analysis_type.lower():
-            filtered_analysis_types[analysis_type] = AnalysisTypeDetail(
-                type=analysis_type,
-                json_schema=prompts.JSON_SCHEMAS.get(analysis_type, {}),
-                example_request=create_example_request(analysis_type)
-            )
+    # Filter and create analysis types based on the query
+    filtered_analysis_types = {
+        analysis_type: AnalysisTypeDetail(
+            type=analysis_type,
+            json_schema=prompts.JSON_SCHEMAS.get(analysis_type, {}),
+            example_request=create_example_request(analysis_type)
+        )
+        for analysis_type in prompts.ANALYSIS_TYPES
+        if not query or query.lower() in analysis_type.lower()
+    }
 
     return AnalysisTypesResponse(analysis_types=filtered_analysis_types)
 
@@ -330,8 +337,39 @@ from asyncio import gather
 
 # Updated CombinedRequest model to handle multiple conditions
 class CombinedRequest(BaseModel):
-    request_data: AnalysisRequest
-    conditions: List[Condition]  # List of conditions
+  request_data: AnalysisRequest
+  conditions: List[Condition]
+
+  class Config:
+      schema_extra = {
+          "example": {
+              "request_data": {
+                  "analysis_type": "sentiment_analysis",
+                  "messages": [
+                      {"role": "user", "content": "I am feeling great today!"},
+                      {"role": "user", "content": "The weather is sunny and pleasant."}
+                  ],
+                  "token_limit": 1000,
+                  "top_p": 0.1,
+                  "temperature": 0.0
+              },
+              "conditions": [
+                  {
+                      "analysis_type": "sentiment_analysis",
+                      "key": "confidence_score",
+                      "threshold": 0.5,
+                      "condition_type": "greater"
+                  },
+                  {
+                      "analysis_type": "topic_extraction",
+                      "key": "relevance_scores",
+                      "threshold": 0.1,
+                      "condition_type": "greater"
+                  }
+              ]
+          }
+      }
+
 
 async def perform_analysis_based_on_type(request_data, analysis_type):
   """
@@ -351,94 +389,26 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
   return response
 
 # Conditional_analysis endpoint
-@app.post("/conditional_analysis/", response_model=AnalysisResult)
-async def conditional_analysis(combined_request: CombinedRequest = Body(
-        ...,
-        example={
-            "request_data": {
-                "analysis_type": "sentiment_analysis",
-                "messages": [
-                    {"role": "user", "content": "I am feeling great today!"},
-                    {"role": "user", "content": "The weather is sunny and pleasant."}
-                ],
-                "token_limit": 1000,
-                "top_p": 0.1,
-                "temperature": 0.0
-            },
-            "conditions": [
-                {
-                    "analysis_type": "sentiment_analysis",
-                    "key": "confidence_score",
-                    "threshold": 0.5,
-                    "condition_type": "greater"
-                },
-                {
-                    "analysis_type": "topic_extraction",
-                    "key": "relevance_scores",
-                    "threshold": 0.1,
-                    "condition_type": "greater"
-                }
-            ]
-        }), token: str = Depends(get_current_user)):
+@app.post("/conditional_analysis/", response_model=AnalysisResult, tags=["Conditional Analysis"])
+async def conditional_analysis(combined_request: CombinedRequest, token: str = Depends(get_current_user)):
     """
-    Perform conditional analysis with multiple conditions, including retry logic.
-    This endpoint analyzes the given request data and checks whether it meets all specified conditions.
-
-    :param combined_request: CombinedRequest object containing analysis request and conditions
-    :return: AnalysisResult indicating whether conditions were met, including details from each condition
+    Perform conditional analysis with multiple conditions. This endpoint analyzes the given request data and checks whether it meets all specified conditions.
     """
     request_data = combined_request.request_data
     conditions = combined_request.conditions
 
-    max_retries = 5
+    analysis_tasks = [perform_analysis_based_on_type(request_data, condition.analysis_type) for condition in conditions]
+    analysis_results = await asyncio.gather(*analysis_tasks)
+
     condition_responses = []
-
-    for condition in conditions:
-        retry = True
-        current_retry = 0
-        total_tokens_used = 0
-        final_openai_response = None
-
-        while retry and current_retry < max_retries:
-            retry = False
-            analysis_result = await perform_analysis_based_on_type(request_data, condition.analysis_type)
-            total_tokens_used += analysis_result.raw_openai_response.get('usage', {}).get('total_tokens', 0)
-            final_openai_response = analysis_result.raw_openai_response
-
-            if not analysis_result.details:
-                condition_responses.append({
-                    "condition": condition,
-                    "result": "Analysis failed or no details available",
-                    "total_tokens_used": total_tokens_used,
-                    "retries": current_retry,
-                    "final_openai_response": final_openai_response
-                })
-                break  # Exit the retry loop for this condition
-
-            condition_met = check_condition(analysis_result, condition)
-
-            if not condition_met:
-                current_retry += 1
-                if current_retry < max_retries:
-                    retry = True
-                else:
-                    condition_responses.append({
-                        "condition": condition,
-                        "result": "Condition not met",
-                        "total_tokens_used": total_tokens_used,
-                        "retries": current_retry,
-                        "final_openai_response": final_openai_response
-                    })
-                    break  # Exit the retry loop for this condition
-            else:
-                condition_responses.append({
-                    "condition": condition,
-                    "result": "Condition met",
-                    "total_tokens_used": total_tokens_used,
-                    "retries": current_retry,
-                    "final_openai_response": final_openai_response
-                })
-                break  # Condition met, exit the retry loop
+    for condition, analysis_result in zip(conditions, analysis_results):
+        condition_met = check_condition(analysis_result, condition)
+        condition_responses.append({
+            "condition": condition,
+            "result": "Condition met" if condition_met else "Condition not met",
+            "details": analysis_result.details,
+            "error": analysis_result.error
+        })
 
     all_conditions_met = all(resp["result"] == "Condition met" for resp in condition_responses)
     analysis_summary = "All conditions met" if all_conditions_met else "One or more conditions not met"
@@ -449,39 +419,39 @@ async def conditional_analysis(combined_request: CombinedRequest = Body(
         error=None if all_conditions_met else "Conditions failed"
     )
 
+# Function to perform analysis based on type
+async def perform_analysis_based_on_type(request_data, analysis_type):
+    """
+    Perform analysis based on the specified analysis type using the existing /analysis endpoint.
+    """
+    request_data.analysis_type = analysis_type
+    return await perform_analysis(request_data)
+
+# Function to check if a condition is met
 def check_condition(analysis_result, condition):
     """
     Check if a given condition is met based on the analysis result.
-    Modify this function according to your condition logic.
     """
     result_value = analysis_result.details.get(condition.key)
 
-    # Check for None value
     if result_value is None:
         return False
 
     try:
-        # Handling array values in the result
         if isinstance(result_value, list):
             if condition.condition_type == 'greater':
                 return any(float(item) > condition.threshold for item in result_value)
             elif condition.condition_type == 'less':
                 return any(float(item) < condition.threshold for item in result_value)
-            # Add more array-handling conditions as needed
-
-        # Handling single value in the result
         else:
             if condition.condition_type == 'greater':
                 return float(result_value) > condition.threshold
             elif condition.condition_type == 'less':
                 return float(result_value) < condition.threshold
-            # Add more single-value conditions as needed
-
     except (TypeError, ValueError):
-        # Handle cases where conversion to float fails or other type errors
         return False
 
-    return False  # Default case if no conditions are met
+    return False
 
 # Main function to run the app
 if __name__ == "__main__":
