@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
+from typing import Union
 
 # Pydantic imports
 from pydantic import BaseModel, Field
@@ -64,7 +65,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "yourURL.com" # replace with your dev server, set production server using OS env value SERVER_URL
+    dev_url = "yourURL.com"
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
@@ -104,10 +105,10 @@ class Message(BaseModel):
 
 # Model for a completion request
 class CompletionRequest(BaseModel):
-    model: str = "gpt-4-1106-preview"
+    model: str = "gpt-3.5-turbo-1106"
     temperature: float = 0
     max_tokens: int = 1000
-    top_p: float = 0.5
+    top_p: float = 0.1
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
     messages: List[Message]
@@ -116,26 +117,27 @@ class CompletionRequest(BaseModel):
 
 # Function to call OpenAI API
 async def call_openai_api(endpoint: str, data: dict):
-  openai_api_key = os.getenv("OPENAI_API_KEY")  # Retrieve API key from environment variable
-  headers = {
-      "Authorization": f"Bearer {openai_api_key}",
-      "Content-Type": "application/json"
-  }
-  url = f"{OPENAI_API_BASE_URL}/{endpoint}"
-  response = None  # Initialize response to None
+    openai_api_key = os.getenv("OPENAI_API_KEY")  # Retrieve API key from environment variable
+    headers = {
+        "Authorization": f"Bearer {openai_api_key}",
+        "Content-Type": "application/json"
+    }
+    url = f"{OPENAI_API_BASE_URL}/{endpoint}"
+    response = None
 
-  async with httpx.AsyncClient() as client:
-      try:
-          response = await client.post(url, headers=headers, json=data)
-          response.raise_for_status()
-          return response.json()
-      except httpx.HTTPError as http_err:
-          # Provide a default status_code if response is None
-          status_code = response.status_code if response else 500
-          return {"error": str(http_err), "status_code": status_code}
-      except httpx.RequestError as req_err:
-          # Handle the case where response is never assigned
-          return {"error": str(req_err), "status_code": 500}
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return {"response": response.json(), "raw_response": response.text, "error": None, "status_code": response.status_code}
+        except httpx.HTTPError as http_err:
+            # Ensure raw response is returned even in case of HTTP errors
+            raw_response = response.text if response else None
+            return {"response": response.json() if response else None, "raw_response": raw_response, "error": str(http_err), "status_code": response.status_code if response else 500}
+        except Exception as exc:
+            # Catch any other exceptions and return the error with the raw response if available
+            raw_response = response.text if response else None
+            return {"response": response.json() if response else None, "raw_response": raw_response, "error": str(exc), "status_code": 500}
 
 # Endpoint for creating completions
 @app.post("/proxy_openai_api/completions/", tags=["Chat"])
@@ -144,10 +146,10 @@ async def proxy_openai_api_completions(completion_request: CompletionRequest, to
 
 # Condition class for specifying individual conditions in the analysis
 class Condition(BaseModel):
-    analysis_type: str  # Type of analysis to perform, e.g., 'sentiment'
-    key: str  # Key in the analysis result to check, e.g., 'score'
-    value: Union[float, str]  # Value to compare against
-    condition_type: Literal['greater', 'less', 'equal', 'contains']  # Type of condition
+    analysis_type: str
+    key: str
+    threshold: Union[float, str]  # Updated to accept both float and str
+    condition_type: Literal['greater', 'less', 'equal', 'contains'] 
 
 # Advanced Analysis
 # Model for an analysis request
@@ -155,7 +157,7 @@ class AnalysisRequest(BaseModel):
     analysis_type: str = Field(default="sentiment_analysis", example="sentiment_analysis")
     messages: List[Message] = Field(default=[{"role": "user", "content": "I feel incredibly happy and content today!"}], example=[{"role": "user", "content": "I feel incredibly happy and content today!"}])
     token_limit: int = Field(default=1000, example=1000)
-    top_p: float = Field(default=0.5, example=1.0)
+    top_p: float = Field(default=0.9, example=0.1)
     temperature: float = Field(default=0.0, example=0.0)
 
 
@@ -239,18 +241,29 @@ analysis_examples = {
 }
 
 # Analysis Endpoint
+# ... [other parts of your code] ...
+
+# Endpoint for performing analysis
 @app.post("/analysis/", response_model=AnalysisResult)
 async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(get_current_user)):
-    # Constructing the system message
+    # Special case handling (if you have any specific analysis type like 'message_length')
+    if request_data.analysis_type == 'message_length':
+        return AnalysisResult(
+            analysis="message_length",
+            details={"length": len(request_data.messages[0].content)},
+            error=None
+        )
+
+    # Construct the system message
     system_message = {
-       "role": "system",
-       "content": prompts.get_system_prompt(request_data.analysis_type)
+        "role": "system",
+        "content": prompts.get_system_prompt(request_data.analysis_type)
     }
     messages = [system_message] + [message.dict() for message in request_data.messages]
 
-    # Assembling the payload for the OpenAI API call
+    # Prepare the payload for the OpenAI API call
     payload = {
-        "model": "gpt-4-1106-preview",
+        "model": "gpt-3.5-turbo-1106",
         "response_format": {"type": "json_object"},  # Enable JSON mode
         "messages": messages,
         "max_tokens": request_data.token_limit,
@@ -258,20 +271,24 @@ async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(g
         "top_p": request_data.top_p
     }
 
-    # Asynchronously call the OpenAI API
-    openai_response = await call_openai_api("chat/completions", payload)
+    # Call the OpenAI API and get both parsed and raw responses
+    openai_response_data = await call_openai_api("chat/completions", payload)
+    openai_response = openai_response_data.get("response")
+    openai_raw_response = openai_response_data.get("raw_response")
+    openai_error = openai_response_data.get("error")
 
-    # Process the OpenAI response and return the analysis result
-    if 'choices' in openai_response and openai_response['choices']:
+    # Check if the response contains the expected data
+    if openai_response and 'choices' in openai_response and openai_response['choices']:
         last_message_content = openai_response['choices'][0].get('message', {}).get('content', '')
         try:
             analysis_result = json.loads(last_message_content)
             if isinstance(analysis_result, dict):
                 return AnalysisResult(analysis="Successful analysis", details=analysis_result, error=None, raw_openai_response=openai_response)
         except json.JSONDecodeError:
-            return AnalysisResult(analysis="Error in processing", details={}, error="Failed to parse the analysis result as JSON.", raw_openai_response=openai_response)
+            return AnalysisResult(analysis="Error in processing", details={}, error="Failed to parse the analysis result as JSON.", raw_openai_response=openai_raw_response)
     else:
-        return AnalysisResult(analysis="Error in response format", details={}, error="Invalid response format from OpenAI API.", raw_openai_response=openai_response)
+        # If there is no valid response, return the error and the raw response
+        return AnalysisResult(analysis="Error in response format", details={}, error=openai_error or "Invalid response format from OpenAI API.", raw_openai_response=openai_raw_response)
 
 
 class AnalysisTypeExample(BaseModel):
@@ -350,7 +367,7 @@ class CombinedRequest(BaseModel):
                       {"role": "user", "content": "The weather is sunny and pleasant."}
                   ],
                   "token_limit": 1000,
-                  "top_p": 0.1,
+                  "top_p": 0.9,
                   "temperature": 0.0
               },
               "conditions": [
@@ -431,27 +448,43 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
 def check_condition(analysis_result, condition):
     """
     Check if a given condition is met based on the analysis result.
+
+    Args:
+    analysis_result (AnalysisResult): The result of the analysis.
+    condition (Condition): The condition to check against the analysis result.
+
+    Returns:
+    bool: True if the condition is met, False otherwise.
     """
     result_value = analysis_result.details.get(condition.key)
 
     if result_value is None:
-        return False
+       return False
 
-    try:
+    if condition.condition_type == 'greater':
+        try:
+           return float(result_value) > condition.threshold
+        except (TypeError, ValueError):
+           return False
+
+    elif condition.condition_type == 'less':
+        try:
+           return float(result_value) < condition.threshold
+        except (TypeError, ValueError):
+            return False
+
+    elif condition.condition_type == 'equal':
         if isinstance(result_value, list):
-            if condition.condition_type == 'greater':
-                return any(float(item) > condition.threshold for item in result_value)
-            elif condition.condition_type == 'less':
-                return any(float(item) < condition.threshold for item in result_value)
-        else:
-            if condition.condition_type == 'greater':
-                return float(result_value) > condition.threshold
-            elif condition.condition_type == 'less':
-                return float(result_value) < condition.threshold
-    except (TypeError, ValueError):
-        return False
+            return condition.threshold in result_value
+        return str(result_value) == str(condition.threshold)
+
+    elif condition.condition_type == 'contains':
+        if isinstance(result_value, list):
+           return str(condition.threshold) in map(str, result_value)
+        return str(condition.threshold) in str(result_value)
 
     return False
+
 
 # Main function to run the app
 if __name__ == "__main__":
