@@ -1,4 +1,4 @@
-# GuardRail - Open Source Ai Guidance & Analysis API 
+# GuardRail OSS - Open Source Ai Guidance & Analysis API 
 ![Guardrail](https://github.com/ruvnet/guardrail/blob/main/assets/guardrail.png?raw=true)
 
 ## 🧭 The GuardRail system combined with AiEQ advances responsible AI with robust data analysis and emotional intelligence, equipping AI with a moral compass.
