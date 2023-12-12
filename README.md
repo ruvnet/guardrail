@@ -6,7 +6,7 @@
 GuardRail is an Open Source API-driven framework, designed to enhance responsible AI systems and workflows, providing advanced data analysis and dynamic conditional completions. This makes it essential for refining AI-powered outputs, increasing their quality and relevance. AiEQ, or Artificial Emotional Intelligence, complements this by equipping AI with the ability to interpret and respond to emotional contexts (EQ), adding a layer of empathy and ethical understanding. This synergy between GuardRail's technical enhancement capabilities and AiEQ's emotional intelligence introduces a new standard in AI, making it more adaptable, responsive, and attuned to human nuances.
 
 ### Test API For Free (more than 50 advanced traits & guiderails)
-- RapidAPI: https://rapidapi.com/ruv/api/guardrail
+- https://rapidapi.com/ruv/api/guardrail
 
 ### OpenAI ChatGPT GPT
 - https://chat.openai.com/g/g-6Bvt5pJFf-guardrail 
