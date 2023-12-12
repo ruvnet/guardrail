@@ -66,7 +66,7 @@ def custom_openapi():
     )
 
     # Define the development server URL
-    dev_url = "yourURL.com"
+    dev_url = "https://guardrails.ruvnet.repl.co"
 
     # Get the server URL from the environment variable
     server_url = os.getenv("SERVER_URL")
@@ -141,15 +141,15 @@ async def call_openai_api(endpoint: str, data: dict):
             return {"response": response.json() if response else None, "raw_response": raw_response, "error": str(exc), "status_code": 500}
 
 # Endpoint for creating completions
-@app.post("/proxy_openai_api/completions/", tags=["Chat"])
-async def proxy_openai_api_completions(completion_request: CompletionRequest, token: str = Depends(get_current_user)):
+@app.post("/completions/", operation_id="Completions", tags=["Completions"])
+async def completions(completion_request: CompletionRequest, token: str = Depends(get_current_user)):
     return await call_openai_api("chat/completions", completion_request.dict())
 
 # Condition class for specifying individual conditions in the analysis
 class Condition(BaseModel):
     analysis_type: str
     key: str
-    threshold: Optional[Union[float, str]] = None  # Making threshold optional
+    threshold: Optional[Union[float, str]] 
     condition_type: Literal['greater', 'less', 'equal', 'contains', 'exists', 
                            'is_type', 'length_greater', 'length_less', 'length_equal', 
                            'nested_contains', 'regex_match', 'key_value_pair']
@@ -244,7 +244,7 @@ analysis_examples = {
 }
 
 # Endpoint for performing analysis
-@app.post("/analysis/", response_model=AnalysisResult)
+@app.post("/analysis/", response_model=AnalysisResult, operation_id="Perform Analysis", tags=["Perform Analysis"])
 async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(get_current_user)):
     # Special case handling (if you have any specific analysis type like 'message_length')
     if request_data.analysis_type == 'message_length':
@@ -307,8 +307,8 @@ class AnalysisTypeDetail(BaseModel):
 class AnalysisTypesResponse(BaseModel):
   analysis_types: dict[str, AnalysisTypeDetail]
 
-@app.get("/analysis_types", response_model=AnalysisTypesResponse)
-async def get_analysis_types(query: Optional[str] = Query(None, description="Keyword for fuzzy search")):
+@app.get("/analysis_types", response_model=AnalysisTypesResponse, operation_id="Analysis Types", tags=["Analysis Types"])
+async def analysis_types(query: Optional[str] = Query(None, description="Keyword for fuzzy search")):
     def create_example_request(analysis_type):
         return {
             "analysis_type": analysis_type,
@@ -398,7 +398,7 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
   return response
 
 # Conditional_analysis endpoint
-@app.post("/conditional_analysis/", response_model=AnalysisResult, tags=["Conditional Analysis"])
+@app.post("/conditional_analysis/", response_model=AnalysisResult, operation_id="Conditional Analysis", tags=["Conditional Analysis"])
 async def conditional_analysis(combined_request: CombinedRequest, token: str = Depends(get_current_user)):
     """
     Perform conditional analysis with multiple conditions. This endpoint analyzes the given request data and checks whether it meets all specified conditions.
