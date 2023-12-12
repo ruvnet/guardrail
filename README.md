@@ -20,7 +20,10 @@ Together, AiEQ and the GuardRail Data Analysis system embody a comprehensive app
 
 
 ### Test API For Free (more than 50 advanced traits & guiderails)
-- https://rapidapi.com/ruv/api/guardrail 
+- RapidAPI: https://rapidapi.com/ruv/api/guardrail
+
+### OpenAI ChatGPT GPT
+- https://chat.openai.com/g/g-6Bvt5pJFf-guardrail 
 
 ## AI Guardrails
 AI Guardrails, as implemented in the GuardRail Script & API, are a set of advanced mechanisms and protocols designed to regulate and oversee the performance of AI systems, particularly in generating and analyzing text. The primary purpose of these guardrails is to ensure that the AI operates within a predefined ethical and quality framework, producing results that are not only accurate but also align with societal norms and values.
