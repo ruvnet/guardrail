@@ -5,6 +5,12 @@
 
 GuardRail is an Open Source API-driven framework, designed to enhance responsible AI systems and workflows, providing advanced data analysis and dynamic conditional completions. This makes it essential for refining AI-powered outputs, increasing their quality and relevance. AiEQ, or Artificial Emotional Intelligence, complements this by equipping AI with the ability to interpret and respond to emotional contexts (EQ), adding a layer of empathy and ethical understanding. This synergy between GuardRail's technical enhancement capabilities and AiEQ's emotional intelligence introduces a new standard in AI, making it more adaptable, responsive, and attuned to human nuances.
 
+### Test API For Free (more than 50 advanced traits & guiderails)
+- RapidAPI: https://rapidapi.com/ruv/api/guardrail
+
+### OpenAI ChatGPT GPT
+- https://chat.openai.com/g/g-6Bvt5pJFf-guardrail 
+
 ## AiEQ 
 ### AiEQ infuses AI with emotional, psychological, and ethical intelligence kind of internal voice, essential for understanding and empathizing with human users.
 
@@ -17,13 +23,6 @@ Complementing AiEQ is the GuardRail open source guidance system. This versatile 
 It offers tools and guidelines for mitigating bias, and addressing psychological, ethical, and emotional considerations in AI development and deployment. GuardRail's adaptability makes it invaluable in various applications, from content moderation and customer support to market research and mental health, ensuring AI contributions are not only high-quality but also ethically sound and emotionally relevant.
 
 Together, AiEQ and the GuardRail Data Analysis system embody a comprehensive approach to responsible AI development. GuardRail complements this by offering an API-driven framework that not only enhances AI capabilities but also ensures their ethical application and mitigates biases. This powerful combination guarantees that AI systems are technically advanced, ethically responsible, and emotionally attuned, setting a new standard for AI as a trusted, empathetic partner in diverse aspects of human life.
-
-
-### Test API For Free (more than 50 advanced traits & guiderails)
-- RapidAPI: https://rapidapi.com/ruv/api/guardrail
-
-### OpenAI ChatGPT GPT
-- https://chat.openai.com/g/g-6Bvt5pJFf-guardrail 
 
 ## AI Guardrails
 AI Guardrails, as implemented in the GuardRail Script & API, are a set of advanced mechanisms and protocols designed to regulate and oversee the performance of AI systems, particularly in generating and analyzing text. The primary purpose of these guardrails is to ensure that the AI operates within a predefined ethical and quality framework, producing results that are not only accurate but also align with societal norms and values.
