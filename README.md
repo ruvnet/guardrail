@@ -3,7 +3,7 @@
 
 ## 🧭 The GuardRail system combined with AiEQ advances responsible AI with robust data analysis and emotional intelligence, equipping AI with a moral compass.
 
-GuardRail is an Open Source API-driven framework, designed to enhance resposible AI systems and workflows, providing advanced data analysis and dynamic conditional completions. This makes it essential for refining AI-powered outputs, increasing their quality and relevance. AiEQ, or Artificial Emotional Intelligence, complements this by equipping AI with the ability to interpret and respond to emotional contexts (EQ), adding a layer of empathy and ethical understanding. This synergy between GuardRail's technical enhancement capabilities and AiEQ's emotional intelligence introduces a new standard in AI, making it more adaptable, responsive, and attuned to human nuances.
+GuardRail is an Open Source API-driven framework, designed to enhance responsible AI systems and workflows, providing advanced data analysis and dynamic conditional completions. This makes it essential for refining AI-powered outputs, increasing their quality and relevance. AiEQ, or Artificial Emotional Intelligence, complements this by equipping AI with the ability to interpret and respond to emotional contexts (EQ), adding a layer of empathy and ethical understanding. This synergy between GuardRail's technical enhancement capabilities and AiEQ's emotional intelligence introduces a new standard in AI, making it more adaptable, responsive, and attuned to human nuances.
 
 ## AiEQ 
 ### AiEQ infuses AI with emotional, psychological, and ethical intelligence kind of internal voice, essential for understanding and empathizing with human users.
