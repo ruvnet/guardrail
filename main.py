@@ -453,6 +453,34 @@ def extract_value(data, key):
             data = data.get(k, {})
     return data
 
+def value_exists(data, key):
+    """Check an existing non-null value without manufacturing missing objects.
+
+    Supports dotted object paths, indexed arrays and terminal array wildcards.
+    Invalid paths fail closed; a wildcard checks presence of the array itself.
+    """
+    if not isinstance(key, str) or not key:
+        return False
+    parts = key.split('.')
+    for position, part in enumerate(parts):
+        match = re.fullmatch(r"([^\[\]]+)(?:\[(-?\d+|\*)\])?", part)
+        if match is None or not isinstance(data, dict):
+            return False
+        name, index = match.groups()
+        if name not in data:
+            return False
+        data = data[name]
+        if index is not None:
+            if not isinstance(data, list):
+                return False
+            if index == '*':
+                return position == len(parts) - 1
+            try:
+                data = data[int(index)]
+            except (IndexError, ValueError):
+                return False
+    return data is not None
+
 # Function to check if a condition is met
 def check_condition(analysis_result, condition):
     """
@@ -465,6 +493,9 @@ def check_condition(analysis_result, condition):
     Returns:
         bool: True if the condition is met, False otherwise.
     """
+    if condition.condition_type == "exists":
+        return value_exists(analysis_result.details, condition.key)
+
     result_value = extract_value(analysis_result.details, condition.key)
 
     if result_value is None:
@@ -492,9 +523,6 @@ def check_condition(analysis_result, condition):
             if isinstance(result_value, list):
                 return any(str(condition.threshold) in str(item) for item in result_value)
             return str(condition.threshold) in str(result_value)
-
-        elif condition.condition_type == 'exists':
-            return result_value is not None
 
         elif condition.condition_type == 'is_type':
             expected_type = getattr(__builtins__, condition.threshold, None)
