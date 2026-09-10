@@ -6,6 +6,9 @@
 # Standard library imports
 import os
 import re
+import secrets
+import math
+import regex
 import json
 import logging
 from typing import List, Literal, Optional, Union, Dict, Any
@@ -21,9 +24,12 @@ from fastapi.encoders import jsonable_encoder
 from typing import Union
 
 # Pydantic imports
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # External library imports
+import re
+import secrets
+import math
 import requests
 import asyncio
 import httpx
@@ -31,13 +37,16 @@ import httpx
 # Local module imports
 import prompts  # Import the prompts module
 
+class SafeModel(BaseModel):
+    model_config = {"allow_inf_nan": False, "extra": "forbid"}
+
 security = HTTPBearer()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
     auth_token = os.getenv("AUTH_TOKEN")
     if credentials.scheme != "Bearer":
         raise HTTPException(status_code=403, detail="Invalid authentication scheme.")
-    if credentials.credentials != auth_token:
+    if not auth_token or len(auth_token) < 32 or len(credentials.credentials) > 1024 or not secrets.compare_digest(credentials.credentials.encode("utf-8"), auth_token.encode("utf-8")):
         raise HTTPException(status_code=403, detail="Invalid token.")
     return credentials.credentials
 
@@ -47,8 +56,8 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -93,52 +102,54 @@ app.openapi = custom_openapi
 OPENAI_API_BASE_URL = "https://api.openai.com/v1"
 
 # Define the AnalysisResult model
-class AnalysisResult(BaseModel):
+class AnalysisResult(SafeModel):
   analysis: str
   details: Dict[str, Any]
   error: Optional[str]
   raw_openai_response: Optional[Dict[str, Any]] = None  # Add this line
 
 # Model for a message within a completion request
-class Message(BaseModel):
-    role: str
-    content: str
+class Message(SafeModel):
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(max_length=16384)
 
 # Model for a completion request
-class CompletionRequest(BaseModel):
+class CompletionRequest(SafeModel):
     model: str = "gpt-3.5-turbo-1106"
     temperature: float = 0
-    max_tokens: int = 1000
+    max_tokens: int = Field(default=1000, ge=1, le=4096)
     top_p: float = 0.1
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
-    messages: List[Message]
-    n: int = 1
-    stream: bool = False
+    messages: List[Message] = Field(min_length=1, max_length=32)
+    n: Literal[1] = 1
+    stream: Literal[False] = False
 
 # Function to call OpenAI API
+provider_slots = asyncio.Semaphore(4)
 async def call_openai_api(endpoint: str, data: dict):
-    openai_api_key = os.getenv("OPENAI_API_KEY")  # Retrieve API key from environment variable
-    headers = {
-        "Authorization": f"Bearer {openai_api_key}",
-        "Content-Type": "application/json"
-    }
-    url = f"{OPENAI_API_BASE_URL}/{endpoint}"
-    response = None
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            return {"response": response.json(), "raw_response": response.text, "error": None, "status_code": response.status_code}
-        except httpx.HTTPError as http_err:
-            # Ensure raw response is returned even in case of HTTP errors
-            raw_response = response.text if response else None
-            return {"response": response.json() if response else None, "raw_response": raw_response, "error": str(http_err), "status_code": response.status_code if response else 500}
-        except Exception as exc:
-            # Catch any other exceptions and return the error with the raw response if available
-            raw_response = response.text if response else None
-            return {"response": response.json() if response else None, "raw_response": raw_response, "error": str(exc), "status_code": 500}
+    if endpoint not in {"chat/completions", "completions"}:
+        raise HTTPException(400, "Unsupported provider endpoint")
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise HTTPException(503, "Provider is not configured")
+    try:
+        async with asyncio.timeout(20), provider_slots:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+                async with client.stream("POST", f"{OPENAI_API_BASE_URL}/{endpoint}",
+                                         headers={"Authorization": f"Bearer {key}"}, json=data) as response:
+                    response.raise_for_status()
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body.extend(chunk)
+                        if len(body) > 1048576:
+                            raise ValueError("provider response limit")
+                    value = json.loads(body)
+                    if not isinstance(value, dict):
+                        raise ValueError("provider response type")
+                    return {"response": value, "raw_response": None, "error": None, "status_code": response.status_code}
+    except (httpx.HTTPError, TimeoutError, ValueError):
+        raise HTTPException(502, "Provider request failed") from None
 
 # Endpoint for creating completions
 @app.post("/completions/", operation_id="Completions", tags=["Completions"])
@@ -146,20 +157,21 @@ async def completions(completion_request: CompletionRequest, token: str = Depend
     return await call_openai_api("chat/completions", completion_request.dict())
 
 # Condition class for specifying individual conditions in the analysis
-class Condition(BaseModel):
+class Condition(SafeModel):
     analysis_type: str
-    key: str
-    threshold: Optional[Union[float, str]] 
+    key: str = Field(min_length=1, max_length=256)
+    threshold: Optional[Union[float, str]] = None 
     condition_type: Literal['greater', 'less', 'equal', 'contains', 'exists', 
                            'is_type', 'length_greater', 'length_less', 'length_equal', 
                            'nested_contains', 'regex_match', 'key_value_pair']
 
 # Advanced Analysis
 # Model for an analysis request
-class AnalysisRequest(BaseModel):
+class AnalysisRequest(SafeModel):
+    model_config = {"validate_default": True}
     analysis_type: str = Field(default="sentiment_analysis", example="sentiment_analysis")
-    messages: List[Message] = Field(default=[{"role": "user", "content": "I feel incredibly happy and content today!"}], example=[{"role": "user", "content": "I feel incredibly happy and content today!"}])
-    token_limit: int = Field(default=1000, example=1000)
+    messages: List[Message] = Field(min_length=1, max_length=32, default=[{"role": "user", "content": "I feel incredibly happy and content today!"}], example=[{"role": "user", "content": "I feel incredibly happy and content today!"}])
+    token_limit: int = Field(default=1000, ge=1, le=4096)
     top_p: float = Field(default=0.9, example=0.1)
     temperature: float = Field(default=0.0, example=0.0)
 
@@ -291,20 +303,20 @@ async def perform_analysis(request_data: AnalysisRequest, token: str = Depends(g
         return AnalysisResult(analysis="Error in response format", details={}, error=openai_error or "Invalid response format from OpenAI API.", raw_openai_response=openai_raw_response)
 
 
-class AnalysisTypeExample(BaseModel):
+class AnalysisTypeExample(SafeModel):
     description: str
     example_request: Dict[str, Any]
 
-class AnalysisTypesResponse(BaseModel):
+class AnalysisTypesResponse(SafeModel):
   analysis_types: Dict[str, AnalysisTypeExample]
 
 # Endpoint to list all analysis types with example JSON requests
-class AnalysisTypeDetail(BaseModel):
+class AnalysisTypeDetail(SafeModel):
   type: str
   json_schema: dict
   example_request: dict  
 
-class AnalysisTypesResponse(BaseModel):
+class AnalysisTypesResponse(SafeModel):
   analysis_types: dict[str, AnalysisTypeDetail]
 
 @app.get("/analysis_types", response_model=AnalysisTypesResponse, operation_id="Analysis Types", tags=["Analysis Types"])
@@ -345,12 +357,12 @@ async def suggest_correct_key(data: dict):
 from asyncio import gather
 
 # Updated CombinedRequest model to handle multiple conditions
-class CombinedRequest(BaseModel):
+class CombinedRequest(SafeModel):
   request_data: AnalysisRequest
-  conditions: List[Condition]
+  conditions: List[Condition] = Field(min_length=1, max_length=32)
 
   class Config:
-      schema_extra = {
+      json_schema_extra = {
           "example": {
               "request_data": {
                   "analysis_type": "sentiment_analysis",
@@ -389,7 +401,7 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
   :return: The result of the analysis.
   """
   # Update the analysis_type in the request_data
-  request_data.analysis_type = analysis_type
+  request_data = request_data.model_copy(update={"analysis_type": analysis_type})
 
   # Call the existing /analysis endpoint
   response = await perform_analysis(request_data)
@@ -433,25 +445,50 @@ async def perform_analysis_based_on_type(request_data, analysis_type):
     """
     Perform analysis based on the specified analysis type using the existing /analysis endpoint.
     """
-    request_data.analysis_type = analysis_type
+    request_data = request_data.model_copy(update={"analysis_type": analysis_type})
     return await perform_analysis(request_data)
 
 # Helper function to extract value from nested JSON data
 def extract_value(data, key):
-    keys = key.split('.')
-    for k in keys:
-        if '[' in k and ']' in k:  # Handle array indices
-            array_key, index = k[:-1].split('[')
-            if index == '*':  # Handle wildcard
-                # Extract all items for a wildcard
-                return [sub_item for sub_item in data.get(array_key, [])]
-            else:
-                # Extract a specific item by index
-                data = data.get(array_key, [])[int(index)]
-        else:
-            # Proceed to the next key if not an array
-            data = data.get(k, {})
+    if not value_exists(data, key):
+        return None
+    for part in key.split('.'):
+        match = re.fullmatch(r"([^\[\]]+)(?:\[(-?\d+|\*)\])?", part)
+        name, index = match.groups()
+        data = data[name]
+        if index == '*':
+            return data
+        if index is not None:
+            data = data[int(index)]
     return data
+
+def value_exists(data, key):
+    """Check an existing non-null value without manufacturing missing objects.
+
+    Supports dotted object paths, indexed arrays and terminal array wildcards.
+    Invalid paths fail closed; a wildcard checks presence of the array itself.
+    """
+    if not isinstance(key, str) or not key:
+        return False
+    parts = key.split('.')
+    for position, part in enumerate(parts):
+        match = re.fullmatch(r"([^\[\]]+)(?:\[(-?\d+|\*)\])?", part)
+        if match is None or not isinstance(data, dict):
+            return False
+        name, index = match.groups()
+        if name not in data:
+            return False
+        data = data[name]
+        if index is not None:
+            if not isinstance(data, list):
+                return False
+            if index == '*':
+                return position == len(parts) - 1
+            try:
+                data = data[int(index)]
+            except (IndexError, ValueError):
+                return False
+    return data is not None
 
 # Function to check if a condition is met
 def check_condition(analysis_result, condition):
@@ -465,6 +502,9 @@ def check_condition(analysis_result, condition):
     Returns:
         bool: True if the condition is met, False otherwise.
     """
+    if condition.condition_type == "exists":
+        return value_exists(analysis_result.details, condition.key)
+
     result_value = extract_value(analysis_result.details, condition.key)
 
     if result_value is None:
@@ -473,13 +513,13 @@ def check_condition(analysis_result, condition):
     try:
         if condition.condition_type == 'greater':
             if isinstance(result_value, list):
-                return all(float(item) > float(condition.threshold) for item in result_value)
-            return float(result_value) > float(condition.threshold)
+                return bool(result_value) and all(type(item) in (int, float) and math.isfinite(item) and math.isfinite(float(condition.threshold)) and item > float(condition.threshold) for item in result_value)
+            return type(result_value) in (int, float) and math.isfinite(result_value) and math.isfinite(float(condition.threshold)) and result_value > float(condition.threshold)
 
         elif condition.condition_type == 'less':
             if isinstance(result_value, list):
-                return all(float(item) < float(condition.threshold) for item in result_value)
-            return float(result_value) < float(condition.threshold)
+                return bool(result_value) and all(type(item) in (int, float) and math.isfinite(item) and math.isfinite(float(condition.threshold)) and item < float(condition.threshold) for item in result_value)
+            return type(result_value) in (int, float) and math.isfinite(result_value) and math.isfinite(float(condition.threshold)) and result_value < float(condition.threshold)
 
         elif condition.condition_type == 'equal':
             if isinstance(result_value, dict):
@@ -493,12 +533,9 @@ def check_condition(analysis_result, condition):
                 return any(str(condition.threshold) in str(item) for item in result_value)
             return str(condition.threshold) in str(result_value)
 
-        elif condition.condition_type == 'exists':
-            return result_value is not None
-
         elif condition.condition_type == 'is_type':
-            expected_type = getattr(__builtins__, condition.threshold, None)
-            return isinstance(result_value, expected_type)
+            expected_type = {"str": str, "int": int, "float": float, "bool": bool, "list": list, "dict": dict}.get(condition.threshold)
+            return type(result_value) is expected_type
 
         elif condition.condition_type in ['length_greater', 'length_less', 'length_equal']:
             if hasattr(result_value, '__len__'):
@@ -512,17 +549,41 @@ def check_condition(analysis_result, condition):
                     return length == threshold
 
         elif condition.condition_type == 'regex_match':
-            return bool(re.match(condition.threshold, str(result_value), re.DOTALL | re.MULTILINE))
+            if not isinstance(condition.threshold, str) or len(condition.threshold) > 256 or len(str(result_value)) > 16384:
+                return False
+            return bool(regex.match(condition.threshold, str(result_value), regex.DOTALL | regex.MULTILINE, timeout=0.02))
 
         elif condition.condition_type == 'key_value_pair':
-            if isinstance(result_value, dict):
+            if isinstance(result_value, dict) and isinstance(condition.threshold, str):
                 key, val = condition.threshold.split(':', 1)
-                return str(result_value.get(key, "")) == val
+                return key in result_value and str(result_value[key]) == val
 
-    except (TypeError, ValueError, IndexError):
+    except (TypeError, ValueError, IndexError, OverflowError, TimeoutError, regex.error):
         return False
 
     return False
+
+class PolicyRequest(SafeModel):
+    details: Dict[str, Any]
+    @field_validator("details")
+    @classmethod
+    def finite_json(cls, value):
+        json.dumps(value, allow_nan=False)
+        return value
+    conditions: List[Condition] = Field(min_length=1, max_length=32)
+
+@app.post("/evaluate/")
+async def evaluate_policy(request: PolicyRequest, token: str = Depends(get_current_user)):
+    return evaluate_local(request)
+
+def evaluate_local(request):
+    json.dumps(request.details, allow_nan=False)
+    result = AnalysisResult(analysis="local", details=request.details, error=None)
+    decisions = [check_condition(result, condition) for condition in request.conditions]
+    return {"allowed": all(decisions), "decisions": decisions, "providerUsed": False}
+
+from safety import RequestLimits
+app.add_middleware(RequestLimits)
 
 # Main function to run the app
 if __name__ == "__main__":

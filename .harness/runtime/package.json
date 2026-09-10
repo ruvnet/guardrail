@@ -1,0 +1,1 @@
+{"name": "@ruvnet/guardrail-runtime", "version": "2.0.0-alpha.1", "private": true, "type": "module", "scripts": {"test": "node --test test.mjs"}, "dependencies": {"@modelcontextprotocol/server": "2.0.0", "@modelcontextprotocol/client": "2.0.0"}}

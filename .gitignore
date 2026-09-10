@@ -1,0 +1,9 @@
+
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+*.db
+*.db-*
+.harness/**/dist/
+.harness/**/target/

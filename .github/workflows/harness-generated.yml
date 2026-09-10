@@ -1,0 +1,36 @@
+name: MetaHarness and Autogenous
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node .harness/generated/bin/verify-review.mjs
+      - run: npm ci --prefix .harness/generated
+      - run: npm test --prefix .harness/generated
+      - run: npm run build --prefix .harness/generated
+      - run: npm run doctor --prefix .harness/generated
+      - run: npm audit --prefix .harness/generated --audit-level=moderate
+      - run: npm run bench:generate --prefix .harness/generated
+      - run: npm run bench:verify --prefix .harness/generated
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked --manifest-path .harness/autogenous/Cargo.toml
+      - name: Build reproducible source and agent artifact
+        run: |
+          mkdir -p release-artifact
+          cp .harness/generated/review-manifest.json release-artifact/
+          cp .harness/generated/bench.generated.json release-artifact/
+          cp .harness/generated/package-lock.json release-artifact/
+          cp .harness/autogenous/Cargo.lock release-artifact/
+          tar -czf release-artifact/generated-agent.tar.gz -C .harness/generated bin dist src repository.json package.json package-lock.json README.md
+          sha256sum release-artifact/* > release-artifact/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-harness-${{ github.sha }}
+          path: release-artifact/
+          retention-days: 14

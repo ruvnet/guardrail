@@ -1,0 +1,33 @@
+name: Project agent validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/benchmark.py
+      - run: pip-audit -r requirements.txt
+      - run: npm ci --prefix .harness/runtime
+      - run: npm test --prefix .harness/runtime
+      - run: npm audit --prefix .harness/runtime --audit-level=moderate
+      - run: node .harness/runtime/cli.mjs test
+        env:
+          RUV_ALLOW_VALIDATION: '1'
+      - run: node .harness/runtime/cli.mjs benchmark
+        env:
+          RUV_ALLOW_VALIDATION: '1'

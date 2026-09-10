@@ -1,16 +1,18 @@
 [tool.poetry]
 name = "ai-data-analysis-guiderail"
-version = "0.0.1"
+version = "2.0.0-alpha.1"
 description = "An advanced data analysis and conditional completions API using OpenAI's GPT models."
 authors = ["@ruvnet"]
 
 [tool.poetry.dependencies]
-python = ">=3.10.0,<3.11"
-fastapi = "^0.105.0"
-httpx = "^0.25.2"
-pydantic = "^2.5.2"
-requests = "^2.31.0"
-uvicorn = "0.24.0.post1"
+python = ">=3.12,<4"
+fastapi = "0.141.1"
+httpx = "0.28.1"
+pydantic = "2.13.5"
+requests = "2.34.2"
+uvicorn = "0.52.4"
+
+regex = "2026.9.10"
 
 [tool.pyright]
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md

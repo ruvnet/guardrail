@@ -1,0 +1,1 @@
+{"name": "guardrail-project", "private": true, "scripts": {"test": "python -m unittest discover -s tests -v", "benchmark": "python scripts/benchmark.py"}}

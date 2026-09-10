@@ -1,0 +1,9 @@
+{
+  "entrypoint": ".harness/runtime/cli.mjs",
+  "commands": [
+    "status",
+    "test",
+    "benchmark",
+    "mcp"
+  ]
+}

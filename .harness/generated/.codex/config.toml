@@ -1,0 +1,3 @@
+[mcp_servers.guardrail-agent]
+command = "node"
+args = [".harness/generated/bin/cli.js", "mcp"]
