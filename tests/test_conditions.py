@@ -2,6 +2,8 @@
 import ast
 from pathlib import Path
 import re
+import math
+import regex
 from types import SimpleNamespace
 import unittest
 
@@ -12,7 +14,7 @@ def load_conditions():
     names = {"extract_value", "value_exists", "check_condition"}
     functions = [node for node in module.body
                  if isinstance(node, ast.FunctionDef) and node.name in names]
-    namespace = {"re": re}
+    namespace = {"re": re, "math": math, "regex": regex}
     exec(compile(ast.Module(body=functions, type_ignores=[]), str(path), "exec"), namespace)
     return namespace["check_condition"]
 

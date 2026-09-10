@@ -1,0 +1,12 @@
+{
+  "repository": "guardrail",
+  "namespace": "ruv://guardrail/policy",
+  "domainTool": "policy_evaluate",
+  "automaticPromotion": false,
+  "inputBytes": 32768,
+  "outputBytes": 65536,
+  "timeoutMs": 30000,
+  "maxConcurrent": 1,
+  "validationOptIn": "RUV_ALLOW_VALIDATION=1",
+  "receiptSignatures": false
+}
